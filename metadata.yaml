@@ -1,6 +1,6 @@
 name: group_media_router
 display_name: 群聊媒体回复规则
-desc: 默认与各群独立回复概率、仅@回复名单及过期排队保护；平台正文读取由独立插件提供。
+desc: 为每个 QQ 群单独设置闲聊和媒体回复概率，也可指定哪些用户只有 @机器人时才回复。
 version: 2.2.0
 author: Wyj425
 repo: https://github.com/Wyj425/astrbot_plugin_group_media_router
