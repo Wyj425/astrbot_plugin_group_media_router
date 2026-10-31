@@ -1,0 +1,125 @@
+{
+  "platform_id": {
+    "type": "string",
+    "description": "QQ机器人ID 首次安装请填写当前 AstrBot 中实际配置的接入或提供商 ID。",
+    "default": ""
+  },
+  "default_rules": {
+    "type": "object",
+    "description": "默认回复规则（未单独设置的群沿用）",
+    "hint": "推荐打开插件的“回复规则”页面直接选群设置。真正@机器人和明确指令照常处理；商城表情不会按普通图片触发。",
+    "items": {
+      "chat_percent": {
+        "type": "float",
+        "description": "普通消息回复概率（0–100%）",
+        "default": 20
+      },
+      "image_percent": {
+        "type": "float",
+        "description": "图片回复概率（0–100%）",
+        "default": 100
+      },
+      "bilibili_percent": {
+        "type": "float",
+        "description": "B站视频回复概率（0–100%）",
+        "default": 100
+      },
+      "heybox_percent": {
+        "type": "float",
+        "description": "小黑盒帖子回复概率（0–100%）",
+        "default": 100
+      },
+      "forward_percent": {
+        "type": "float",
+        "description": "转发聊天记录回复概率（0–100%）",
+        "default": 100
+      },
+      "at_only_users": {
+        "type": "list",
+        "description": "仅被真正@时回复的用户QQ号",
+        "default": [],
+        "hint": "每项只填QQ号。此名单默认适用于未覆盖名单的群。"
+      }
+    }
+  },
+  "group_rules": {
+    "type": "template_list",
+    "description": "各群单独回复规则",
+    "default": [],
+    "templates": {
+      "group": {
+        "name": "群聊回复规则",
+        "display_item": "group_name",
+        "hint": "概率填 -1 沿用默认，填0不自动回复。名单可独立选择继承或替换默认。",
+        "items": {
+          "group_id": {
+            "type": "string",
+            "description": "QQ群号",
+            "default": ""
+          },
+          "group_name": {
+            "type": "string",
+            "description": "群名称（方便识别）",
+            "default": ""
+          },
+          "chat_percent": {
+            "type": "float",
+            "description": "普通消息概率（-1默认，其他0–100%）",
+            "default": -1
+          },
+          "image_percent": {
+            "type": "float",
+            "description": "图片概率（-1默认，其他0–100%）",
+            "default": -1
+          },
+          "bilibili_percent": {
+            "type": "float",
+            "description": "B站视频概率（-1默认，其他0–100%）",
+            "default": -1
+          },
+          "heybox_percent": {
+            "type": "float",
+            "description": "小黑盒帖子概率（-1默认，其他0–100%）",
+            "default": -1
+          },
+          "forward_percent": {
+            "type": "float",
+            "description": "转发聊天记录概率（-1默认，其他0–100%）",
+            "default": -1
+          },
+          "at_only_mode": {
+            "type": "string",
+            "description": "仅@回复名单来源",
+            "options": [
+              "继承默认",
+              "单独设置"
+            ],
+            "default": "继承默认"
+          },
+          "at_only_users": {
+            "type": "list",
+            "description": "此群仅@回复的用户QQ号",
+            "default": [],
+            "hint": "选择单独设置后生效；空列表表示此群不限制任何用户，不叠加默认名单。"
+          }
+        }
+      }
+    }
+  },
+  "allowed_groups": {
+    "type": "list",
+    "description": "高级：插件生效群号或会话ID（空列表为全部群）",
+    "default": []
+  },
+  "stale_chat_groups": {
+    "type": "list",
+    "description": "高级：跳过排队过久的概率闲聊的群号",
+    "hint": "@机器人、明确提问和媒体不受过期闲聊跳过规则影响。",
+    "default": []
+  },
+  "stale_chat_seconds": {
+    "type": "int",
+    "description": "高级：概率闲聊最大排队时间（秒）",
+    "default": 30
+  }
+}
