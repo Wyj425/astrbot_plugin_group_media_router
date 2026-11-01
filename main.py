@@ -12,9 +12,10 @@ from .freshness import stale_chat
 from .mention_policy import mentions_bot
 from .rules import resolve, selected
 from .web_rules import RulesPageMixin
+from .reply_limit import ReplyLimitMixin
 
-@register('group_media_router', 'Wyj425', '分群回复规则、仅@回复名单及过期闲聊保护', '2.2.0')
-class GroupMediaRouter(RulesPageMixin, Star):
+@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.0')
+class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -64,6 +65,10 @@ class GroupMediaRouter(RulesPageMixin, Star):
             if len(self.seen) > 2048: self.seen.popitem(last=False)
         event.is_at_or_wake_command = True
         event.set_extra('group_media_route', (kind, detail))
+        if not self._reply_limit_available(event):
+            event.set_extra('group_media_reply_limit_blocked', True)
+            event.is_at_or_wake_command = False
+            return
         # AstrBot otherwise skips pure Forward/Json events before on_llm_request.
         if kind in ('forward', 'bilibili', 'heybox') and not event.message_str.strip():
             if kind == 'heybox': event.message_str = '请看看群友分享的小黑盒帖子：' + detail['url']
@@ -76,16 +81,22 @@ class GroupMediaRouter(RulesPageMixin, Star):
         if self._at_only_decision(event) is False:
             self._stop_nonmention(event)
             return
-        if event.get_extra('group_media_probability_blocked', False):
+        if (event.get_extra('group_media_probability_blocked', False)
+                or event.get_extra('group_media_reply_limit_blocked', False)):
+            self._release_reply(event)
             event.is_at_or_wake_command = False
             event.stop_event()
             return
         route = event.get_extra('group_media_route')
         if route and self._stale(event,route[0]):
+            self._release_reply(event)
             event.set_extra('group_media_stale_skipped',True)
             event.stop_event()
             logger.info('[group_media_router] skipped stale automatic chat group=%s age=%.1fs',
                         event.get_group_id(),self._age(event))
+            return
+        if not self._reply_limit_available(event):
+            self._block_reply_limit(event)
             return
         if not route or event.get_extra('group_media_enriched'): return
         if self._guarded(event):
@@ -117,6 +128,7 @@ class GroupMediaRouter(RulesPageMixin, Star):
     async def enforce_reply_policy(self, event):
         # Suppress a reply already being generated when this rule was enabled.
         if self._at_only_decision(event) is False or event.get_extra('group_media_probability_blocked', False):
+            self._release_reply(event)
             result = event.get_result()
             if result is not None and hasattr(result, 'chain'):
                 result.chain.clear()
@@ -125,6 +137,28 @@ class GroupMediaRouter(RulesPageMixin, Star):
             else:
                 event.is_at_or_wake_command = False
                 event.stop_event()
+            return
+        result = event.get_result()
+        if not self._has_reply_content(result):
+            self._release_reply(event)
+            return
+        if (event.get_extra('group_media_reply_limit_blocked', False)
+                or not self._reserve_reply(event)):
+            self._block_reply_limit(event)
+
+    def _block_reply_limit(self, event):
+        self._release_reply(event)
+        result = event.get_result()
+        if result is not None and hasattr(result, 'chain'):
+            result.chain.clear()
+        event.set_extra('group_media_reply_limit_blocked', True)
+        event.is_at_or_wake_command = False
+        event.stop_event()
+        logger.info('[group_media_router] skipped automatic reply: per-minute limit group=%s', event.get_group_id())
+
+    @filter.after_message_sent(priority=sys.maxsize)
+    async def count_sent_reply(self, event):
+        self._finish_reply(event)
 
     def _at_only_decision(self, event):
         if event.get_platform_id() != self.config.get('platform_id', ''):

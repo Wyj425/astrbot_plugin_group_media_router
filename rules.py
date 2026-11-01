@@ -8,7 +8,14 @@ import re
 FIELDS = {'chat': 'chat_percent', 'image': 'image_percent',
           'bilibili': 'bilibili_percent', 'forward': 'forward_percent', 'heybox': 'heybox_percent'}
 BASE_DEFAULTS = {'chat_percent': 20, 'image_percent': 100,
-                 'bilibili_percent': 100, 'forward_percent': 100, 'heybox_percent': 100, 'at_only_users': []}
+                 'bilibili_percent': 100, 'forward_percent': 100, 'heybox_percent': 100,
+                 'reply_limit_per_minute': 0, 'at_only_users': []}
+
+
+def _reply_limit(value, fallback):
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 600:
+        return value
+    return fallback
 
 
 def _percent(value, fallback):
@@ -29,6 +36,7 @@ def migrate(config, names=None):
     result = copy.deepcopy(dict(config))
     if isinstance(result.get('default_rules'), dict):
         result['default_rules'].setdefault('heybox_percent', 100)
+        result['default_rules'].setdefault('reply_limit_per_minute', 0)
         result['rules_version'] = 2
         return result
     defaults = copy.deepcopy(BASE_DEFAULTS)
@@ -51,7 +59,8 @@ def migrate(config, names=None):
 def resolve(config, group_id):
     current = config if isinstance(config.get('default_rules'), dict) else migrate(config)
     raw = current.get('default_rules', {})
-    values = {k:_percent(raw.get(k), v) for k,v in BASE_DEFAULTS.items() if k != 'at_only_users'}
+    values = {k:_percent(raw.get(k), BASE_DEFAULTS[k]) for k in FIELDS.values()}
+    values['reply_limit_per_minute'] = _reply_limit(raw.get('reply_limit_per_minute'), 0)
     values['at_only_users'] = _ids(raw.get('at_only_users', []))
     source, inherited = 'default', list(BASE_DEFAULTS)
     for row in current.get('group_rules', []):
@@ -62,6 +71,10 @@ def resolve(config, group_id):
             if override is not None:
                 values[key] = override
                 inherited.remove(key)
+        limit = _reply_limit(row.get('reply_limit_per_minute'), None)
+        if limit is not None:
+            values['reply_limit_per_minute'] = limit
+            inherited.remove('reply_limit_per_minute')
         if row.get('at_only_mode', '继承默认') == '单独设置':
             values['at_only_users'] = _ids(row.get('at_only_users', []))
             inherited.remove('at_only_users')
@@ -98,7 +111,15 @@ def validate(defaults, groups):
             raise ValueError('回复概率必须为 0–100；群规则可填 -1 沿用默认')
         return value
 
-    out_defaults = {key:percent(defaults.get(key, val)) for key,val in BASE_DEFAULTS.items() if key != 'at_only_users'}
+    def reply_limit(value, inherit=False):
+        if inherit and value == -1 and not isinstance(value, bool):
+            return -1
+        if _reply_limit(value, None) is None:
+            raise ValueError('每分钟回复上限须为 0–600 的整数；0 不限制，群规则可填 -1 沿用默认')
+        return value
+
+    out_defaults = {key:percent(defaults.get(key, BASE_DEFAULTS[key])) for key in FIELDS.values()}
+    out_defaults['reply_limit_per_minute'] = reply_limit(defaults.get('reply_limit_per_minute', 0))
     out_defaults['at_only_users'] = ids(defaults.get('at_only_users', []))
     seen, out_groups = set(), []
     for row in groups:
@@ -113,5 +134,6 @@ def validate(defaults, groups):
         clean = {'__template_key':'group','group_id':gid,'group_name':str(row.get('group_name',''))[:120],
                  'at_only_mode':mode,'at_only_users':ids(row.get('at_only_users',[]))}
         clean.update({key:percent(row.get(key,-1),True) for key in FIELDS.values()})
+        clean['reply_limit_per_minute'] = reply_limit(row.get('reply_limit_per_minute', -1), True)
         out_groups.append(clean)
     return out_defaults, out_groups
