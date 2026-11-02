@@ -117,14 +117,38 @@ class ReplyLimitMixin:
             event.set_extra('group_media_reply_reservation', None)
 
     def _finish_reply(self, event):
-        reservation = event.get_extra('group_media_reply_reservation')
-        if not reservation:
+        # A result may contain several segmented QQ messages. Each successful
+        # protocol send has already committed its own slot; this hook only frees
+        # a decorating-stage reservation that was never sent.
+        self._release_reply(event)
+
+    def _install_send_budget(self, event):
+        from .reply_send import ReplySendProxy
+        if self._reply_limit(event) is None or not getattr(event, 'bot', None):
             return
-        if getattr(event, '_has_send_oper', False):
-            self._reply_window().commit(*reservation)
-        else:
-            self._reply_window().release(*reservation)
+        if not isinstance(event.bot, ReplySendProxy):
+            event.bot = ReplySendProxy(self, event, event.bot)
+
+    async def _send_limited_reply(self, event, send):
+        if event.get_extra('group_media_reply_limit_blocked', False):
+            return None
+        if not self._reserve_reply(event):
+            self._block_reply_limit(event)
+            return None
+        reservation = event.get_extra('group_media_reply_reservation')
+        # Transfer ownership before awaiting I/O. Concurrent sends from the same
+        # event must reserve different slots instead of sharing one token.
         event.set_extra('group_media_reply_reservation', None)
+        try:
+            result = await send()
+        except BaseException:
+            if reservation:
+                self._reply_window().release(*reservation)
+            raise
+        if reservation:
+            self._reply_window().commit(*reservation)
+        event.set_extra('group_media_reply_sent_messages', event.get_extra('group_media_reply_sent_messages', 0)+1)
+        return result
 
     @staticmethod
     def _has_reply_content(result):

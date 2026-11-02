@@ -26,6 +26,8 @@ const artifacts = process.env.ARTIFACT_DIR || path.resolve(root, '../../reply-li
     await page.waitForFunction(()=>!document.getElementById('target').disabled);
     const save = async () => {await page.click('#save'); await page.waitForFunction(()=>document.getElementById('notice').textContent==='已保存并生效');};
     assert.equal(await page.inputValue('#replyLimit'),'5');
+    assert((await page.locator('.reply-window').textContent()).includes('文字、语音和表情各计一条'));
+    assert((await page.locator('#preview').textContent()).includes('5 条/分钟'));
     assert(!(await page.locator('.note').textContent()).match(/定时主动聊天|社区精选/));
     await page.fill('#replyLimit','3'); await save();
     await page.selectOption('#target','1');

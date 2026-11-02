@@ -3,6 +3,7 @@ import copy
 from collections import OrderedDict
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import unittest
 from _load import load
 from test_reply_limit import Event, Clock
@@ -35,6 +36,7 @@ class HookTests(unittest.IsolatedAsyncioTestCase):
         e.message_str = 'hello'
         e.get_sender_id = lambda: '456'
         e.result = SimpleNamespace(chain=[SimpleNamespace(text='reply')])
+        e.bot = SimpleNamespace(call_action=AsyncMock(return_value={'message_id': str(self.counter)}))
         e.get_result = lambda: e.result
         e.stop_event = lambda: e.extra.update(stopped=True)
         return e
@@ -47,7 +49,7 @@ class HookTests(unittest.IsolatedAsyncioTestCase):
         first = self.event()
         await self.prepare(first)
         await self.p.enforce_reply_policy(first)
-        first._has_send_oper = True
+        await first.bot.send_group_msg(group_id=1, message='reply')
         await self.p.count_sent_reply(first)
         second = self.event()
         await self.p.route(second)
@@ -61,13 +63,14 @@ class HookTests(unittest.IsolatedAsyncioTestCase):
             e = self.event(at=True)
             await self.prepare(e)
             await self.p.enforce_reply_policy(e)
-            e._has_send_oper = True
+            # Mentions retain the original client; no budget proxy is installed.
+            await e.bot.call_action('send_group_msg', group_id=1, message='reply')
             await self.p.count_sent_reply(e)
             self.assertFalse(e.get_extra('stopped'))
         regular = self.event()
         await self.prepare(regular)
         await self.p.enforce_reply_policy(regular)
-        regular._has_send_oper = True
+        await regular.bot.send_group_msg(group_id=1, message='reply')
         await self.p.count_sent_reply(regular)
         at = self.event(at=True)
         await self.prepare(at)

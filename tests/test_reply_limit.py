@@ -1,6 +1,7 @@
 import copy
 import unittest
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from _load import load
 
 policy = load('reply_limit')
@@ -92,17 +93,17 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.groups, {})
 
 
-class EventTests(unittest.TestCase):
-    def test_at_reply_neither_uses_nor_needs_quota(self):
+class EventTests(unittest.IsolatedAsyncioTestCase):
+    async def test_at_reply_neither_uses_nor_needs_quota(self):
         o = Subject()
         regular = Event()
         self.assertTrue(o._reserve_reply(regular))
-        regular._has_send_oper = True
+        await o._send_limited_reply(regular, AsyncMock(return_value={'message_id': '1'}))
         o._finish_reply(regular)
         for _ in range(10):
             at = Event(segments=[{'type': 'at', 'data': {'qq': '99'}}])
             self.assertTrue(o._reserve_reply(at))
-            at._has_send_oper = True
+            await o._send_limited_reply(at, AsyncMock(return_value={'message_id': '2'}))
             o._finish_reply(at)
         self.assertFalse(o._reply_limit_available(Event()))
 
@@ -136,12 +137,12 @@ class EventTests(unittest.TestCase):
             self.assertTrue(o._reserve_reply(event))
         self.assertTrue(o._reply_limit_available(Event()))
 
-    def test_other_group_and_group_override(self):
+    async def test_other_group_and_group_override(self):
         o = Subject()
         o.config['group_rules'] = [{'group_id': '2', 'reply_limit_per_minute': 0}]
         a = Event()
         o._reserve_reply(a)
-        a._has_send_oper = True
+        await o._send_limited_reply(a, AsyncMock(return_value={'message_id': '1'}))
         o._finish_reply(a)
         self.assertTrue(o._reply_limit_available(Event(group='2')))
         self.assertTrue(o._reply_limit_available(Event(group='3')))

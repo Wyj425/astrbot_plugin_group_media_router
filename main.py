@@ -14,12 +14,24 @@ from .rules import resolve, selected
 from .web_rules import RulesPageMixin
 from .reply_limit import ReplyLimitMixin
 
-@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.0')
+@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.1')
 class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
         self.seen = OrderedDict()
+
+    async def initialize(self):
+        await RulesPageMixin.initialize(self)
+        from astrbot.core.platform.astr_message_event import current_message_event
+        from .context_send import ContextReplySender
+        self._context_reply_sender = ContextReplySender(self, current_message_event.get)
+        self._context_reply_sender.install()
+
+    async def terminate(self):
+        sender = getattr(self, '_context_reply_sender', None)
+        if sender is not None:
+            sender.remove()
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=sys.maxsize)
     async def route(self, event: AstrMessageEvent):
@@ -65,6 +77,7 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
             if len(self.seen) > 2048: self.seen.popitem(last=False)
         event.is_at_or_wake_command = True
         event.set_extra('group_media_route', (kind, detail))
+        self._install_send_budget(event)
         if not self._reply_limit_available(event):
             event.set_extra('group_media_reply_limit_blocked', True)
             event.is_at_or_wake_command = False
@@ -88,6 +101,7 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
             event.stop_event()
             return
         route = event.get_extra('group_media_route')
+        self._install_send_budget(event)
         if route and self._stale(event,route[0]):
             self._release_reply(event)
             event.set_extra('group_media_stale_skipped',True)
@@ -126,6 +140,7 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
 
     @filter.on_decorating_result(priority=sys.maxsize)
     async def enforce_reply_policy(self, event):
+        self._install_send_budget(event)
         # Suppress a reply already being generated when this rule was enabled.
         if self._at_only_decision(event) is False or event.get_extra('group_media_probability_blocked', False):
             self._release_reply(event)
