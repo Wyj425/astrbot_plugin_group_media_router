@@ -133,5 +133,47 @@
     "type": "int",
     "description": "高级：概率闲聊最大排队时间（秒）",
     "default": 30
+  },
+  "history_images": {
+    "type": "object",
+    "description": "触发回复时参考历史图片",
+    "hint": "仅在已经触发回复后，读取同群最近消息并将图片附给当前视觉聊天模型。不逐图调用描述模型；图片仍消耗模型输入额度。新安装默认关闭。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "开启按需历史图片理解",
+        "default": false
+      },
+      "message_limit": {
+        "type": "int",
+        "description": "检查最近多少条群消息",
+        "default": 30,
+        "hint": "范围1–100，以触发消息为截止点。"
+      },
+      "max_images": {
+        "type": "int",
+        "description": "每次最多参考图片数",
+        "default": 4,
+        "hint": "范围1–8，优先保留当前或引用图片，其余从近期普通图片中选取；跳过QQ标记的表情并去重。"
+      },
+      "max_age_minutes": {
+        "type": "int",
+        "description": "历史图片最长时间（分钟）",
+        "default": 120,
+        "hint": "范围1–1440，超过此时间不再附带。"
+      },
+      "max_side": {
+        "type": "int",
+        "description": "历史图片最长边（像素）",
+        "default": 1280,
+        "hint": "范围512–1536。等比缩小为JPEG，压缩结果每张不超过512KB。"
+      },
+      "cache_minutes": {
+        "type": "int",
+        "description": "下载与压缩缓存时间（分钟）",
+        "default": 15,
+        "hint": "范围1–60。只缓存在内存中；缓存复用可减少下载，模型每次读图仍按输入计费。"
+      }
+    }
   }
 }

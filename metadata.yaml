@@ -1,7 +1,7 @@
 name: group_media_router
 display_name: 群聊媒体回复规则
 desc: 为每个 QQ 群设置回复概率、每分钟自动回复上限和仅@回复名单，真正@不占自动回复额度。
-version: 2.3.2
+version: 2.4.0
 author: Wyj425
 repo: https://github.com/Wyj425/astrbot_plugin_group_media_router
 astrbot_version: ">=4.29.3"

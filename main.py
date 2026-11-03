@@ -13,9 +13,10 @@ from .mention_policy import mentions_bot
 from .rules import resolve, selected
 from .web_rules import RulesPageMixin
 from .reply_limit import ReplyLimitMixin
+from .history_images import HistoryImagesMixin
 
-@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.2')
-class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
+@register('group_media_router', 'Wyj425', '分群回复规则、自动回复上限和按需历史图片理解', '2.4.0')
+class GroupMediaRouter(HistoryImagesMixin, ReplyLimitMixin, RulesPageMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -32,6 +33,9 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
         sender = getattr(self, '_context_reply_sender', None)
         if sender is not None:
             sender.remove()
+        cache = getattr(self, '_history_image_cache', None)
+        if cache is not None:
+            await cache.close()
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=sys.maxsize)
     async def route(self, event: AstrMessageEvent):
@@ -97,6 +101,15 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
         # Lower-priority reply plugins must still not answer this member.
         if self._at_only_decision(event) is False:
             self._stop_nonmention(event)
+
+    @filter.on_llm_request(priority=-sys.maxsize)
+    async def history_image_context(self, event, req):
+        # Run after policy guards and the normal current/quoted image handlers.
+        try:
+            await self._attach_history_images(event, req)
+        except Exception as exc:
+            # Expired QQ URLs or unavailable history must not cancel the reply.
+            logger.warning('[group_media_router] historical images skipped error=%s', type(exc).__name__)
 
     @filter.on_llm_request(priority=sys.maxsize)
     async def enrich(self, event, req):
