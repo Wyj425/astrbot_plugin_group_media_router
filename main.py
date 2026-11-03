@@ -14,7 +14,7 @@ from .rules import resolve, selected
 from .web_rules import RulesPageMixin
 from .reply_limit import ReplyLimitMixin
 
-@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.1')
+@register('group_media_router', 'Wyj425', '分群回复概率、每分钟回复上限及仅@回复名单', '2.3.2')
 class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -39,7 +39,10 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
             return
         decision = self._at_only_decision(event)
         if decision is False:
-            self._stop_nonmention(event)
+            # AstrBot records group history at maxsize-2. Let that finish before
+            # ending this silent member's event, so replies to other members
+            # still have the discussion's missing antecedents.
+            self._stop_nonmention(event, stop=False)
             return
         if decision is True:
             event.is_at_or_wake_command = True
@@ -87,6 +90,13 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
             if kind == 'heybox': event.message_str = '请看看群友分享的小黑盒帖子：' + detail['url']
             else: event.message_str = '请回应这份转发聊天记录。' if kind == 'forward' else '请看看群友分享的B站视频：' + str(detail)
         logger.info('[group_media_router] selected kind=%s explicit=%s', kind, explicit)
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=sys.maxsize-3)
+    async def stop_nonmention_after_context(self, event: AstrMessageEvent):
+        # Both builtin group-history handlers run at maxsize-2 in AstrBot 4.29.3.
+        # Lower-priority reply plugins must still not answer this member.
+        if self._at_only_decision(event) is False:
+            self._stop_nonmention(event)
 
     @filter.on_llm_request(priority=sys.maxsize)
     async def enrich(self, event, req):
@@ -192,12 +202,15 @@ class GroupMediaRouter(ReplyLimitMixin, RulesPageMixin, Star):
         segments = raw.get('message', []) if hasattr(raw, 'get') else []
         return mentions_bot(segments, event.get_self_id())
 
-    def _stop_nonmention(self, event):
+    def _stop_nonmention(self, event, *, stop=True):
+        already_marked = event.get_extra('group_media_reply_blocked') == 'at_only_user'
         event.set_extra('group_media_reply_blocked', 'at_only_user')
         event.is_at_or_wake_command = False
-        event.stop_event()
-        logger.info('[group_media_router] suppressed non-mention group=%s sender=%s',
-                    event.get_group_id(), event.get_sender_id())
+        if stop:
+            event.stop_event()
+        if not already_marked:
+            logger.info('[group_media_router] suppressed non-mention group=%s sender=%s',
+                        event.get_group_id(), event.get_sender_id())
 
     def _guarded(self,event):
         return (event.get_platform_id()==self.config.get('platform_id','')

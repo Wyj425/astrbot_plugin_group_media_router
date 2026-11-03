@@ -29,4 +29,6 @@
 
 单群名单的 `at_only_mode` 可选「继承默认」或「单独设置」。选择「单独设置」后，`at_only_users` 替换默认名单，留空表示该群不限制任何用户。
 
+`at_only_users` 只限制回复，不屏蔽该用户在群聊上下文中的发言。请同时开启 AstrBot 的群聊上下文功能；文本记录和历史图片的描述方式仍由 AstrBot 配置决定。
+
 `stale_chat_seconds` 只在 `stale_chat_groups` 指定的群中生效；名单留空时，尚未为任何群启用过期闲聊保护。
